@@ -1,6 +1,6 @@
 // Gradle updates
 wrapper {
-	gradleVersion GRADLE_VERSION
+	gradleVersion = GRADLE_VERSION
 }
 
 // Dependency updates
@@ -11,5 +11,5 @@ tasks.named("dependencyUpdates").configure {
 					!it.candidate.version.toLowerCase().contains('maven')
 		}
 	}
-	gradleReleaseChannel="current"
+	gradleReleaseChannel = "current"
 }

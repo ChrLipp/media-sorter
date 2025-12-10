@@ -34,9 +34,9 @@ ext {
 	ARGS = [
 //		'-h'                // help
 //		'-V'                // version
-		'-i', '/Users/christian/Pictures/2017',
-		'-o', '/Users/christian/Pictures/2017',
-//		'-t'
+		'-i', '/Users/christian/Pictures/Christians iPhone',
+		'-o', '/Users/christian/Pictures/Destination',
+//		'-t'				// test
 //		'-e', '/Volumes/photo/2018/201801/20180120 Feier Mandi/DSCN6618.JPG'
 //		'-e', '/Users/christian/Pictures/2017/IMG_4496.JPG'
 //		'-e', '/Users/christian/Pictures/2017/IMG_4475.MOV'
@@ -44,14 +44,16 @@ ext {
 }
 
 // Java options
-java.sourceCompatibility = JavaVersion.VERSION_18
-java.targetCompatibility = JavaVersion.VERSION_18
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
 
 // Kotlin options
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
-	kotlinOptions {
-		freeCompilerArgs = ['-Xjsr305=strict']
-		jvmTarget = '18'
+kotlin {
+	compilerOptions {
+		freeCompilerArgs.addAll '-Xjsr305=strict'
 	}
 }
 
@@ -62,7 +64,7 @@ kapt {
 }
 
 // Test options
-tasks.withType(Test).all {
+tasks.named('test') {
 	useJUnitPlatform()
 }
 

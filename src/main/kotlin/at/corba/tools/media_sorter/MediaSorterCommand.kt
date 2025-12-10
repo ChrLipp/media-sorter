@@ -37,7 +37,6 @@ class MediaSorterCommand : Callable<Int> {
 
         @CommandLine.Option(names = ["-t", "--test"], description = ["Simulation mode, no movement"])
         var doSimulateOnly = false
-
     }
 
     /** Test file */
