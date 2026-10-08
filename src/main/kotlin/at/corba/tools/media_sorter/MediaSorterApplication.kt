@@ -15,7 +15,7 @@ class MediaSorterApplication(
     /** Variable for passing the exit code */
     private var exitCode: Int = 0
 
-    override fun run(vararg args: String?) {
+    override fun run(vararg args: String) {
         exitCode = CommandLine(commandLineParameter).execute(*args)
     }
 

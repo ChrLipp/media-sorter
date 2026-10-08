@@ -1,7 +1,7 @@
 # Media sorter
 Sorts iPhone media files into monthly directories.
 
-- Based on Java 21
+- Based on Java 25
 - written in [Kotlin](https://kotlinlang.org/)
 - powered by [Spring Boot](https://spring.io/projects/spring-boot)
 - build with [Gradle](https://gradle.org/)

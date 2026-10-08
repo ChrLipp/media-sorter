@@ -60,6 +60,7 @@ class MediaSorterLogic
         inputDirectory
             .listFiles()
             ?.filter { fileEntry -> fileEntry.isFile }
+            ?.filter { fileEntry -> !fileEntry.name.startsWith("._") }
             ?.filter { fileEntry -> isPhoto(fileEntry) || isVideo(fileEntry) }
             ?.forEach { fileEntry ->
                 val mediaTS = getCreationDate(fileEntry)

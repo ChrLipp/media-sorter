@@ -1,5 +1,5 @@
 plugins {
-	id 'com.github.ben-manes.versions' version "$GRADLE_VERSIONS_PLUGIN_VERSION"
+	id 'io.github.ben-manes.versions' version "$GRADLE_VERSIONS_PLUGIN_VERSION"
 	id 'org.springframework.boot' version "$SPRING_BOOT_VERSION"
 	id 'io.spring.dependency-management' version "$SPRING_DEPENDENCY_VERSION"
 	id 'org.jetbrains.kotlin.plugin.spring' version "$KOTLIN_VERSION"
@@ -34,9 +34,14 @@ ext {
 	ARGS = [
 //		'-h'                // help
 //		'-V'                // version
-		'-i', '/Users/christian/Pictures/Christians iPhone',
-		'-o', '/Users/christian/Pictures/Destination',
+//		# Process directories
+//      ["-i", "--input"] Input directory
+		'-i', '/Volumes/USB250GB/Mediathek',
+//		["-o", "--output"] Output directory
+		'-o', '/Users/christian/Sort',
+//		["-t", "--test"] Simulation mode, no movement"
 //		'-t'				// test
+//		# Test only a file, alternative to the arguments above
 //		'-e', '/Volumes/photo/2018/201801/20180120 Feier Mandi/DSCN6618.JPG'
 //		'-e', '/Users/christian/Pictures/2017/IMG_4496.JPG'
 //		'-e', '/Users/christian/Pictures/2017/IMG_4475.MOV'
@@ -46,7 +51,7 @@ ext {
 // Java options
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
+		languageVersion = JavaLanguageVersion.of(25)
 	}
 }
 
