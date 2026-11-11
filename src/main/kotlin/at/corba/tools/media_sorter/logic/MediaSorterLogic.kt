@@ -3,6 +3,7 @@ package at.corba.tools.media_sorter.logic
 import at.corba.tools.media_sorter.libs.CommandExecuter
 import com.drew.imaging.ImageMetadataReader
 import com.drew.imaging.ImageProcessingException
+import com.drew.metadata.Metadata
 import com.drew.metadata.exif.ExifIFD0Directory
 import com.drew.metadata.exif.ExifSubIFDDirectory
 import com.drew.metadata.mov.QuickTimeDirectory
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.BasicFileAttributes
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -28,6 +30,7 @@ class MediaSorterLogic
     private val yearFormatter = DateTimeFormatter.ofPattern("yyyy")
     private val yearMonthFormatter = DateTimeFormatter.ofPattern("yyyyMM")
     private val yearMonthDayFormatter = DateTimeFormatter.ofPattern("yyyyMMdd")
+    private val timestampFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
 
     /**
      * Sorts
@@ -36,7 +39,12 @@ class MediaSorterLogic
      * @param testOnly          when true, just log it. when false: do the move
      */
     fun sort(inputDirectory: File, outputDirectory: File, testOnly: Boolean) {
-        // Logging the test mode|
+        // Logging the start time
+        val startTS = LocalDateTime.now()
+        var handledFiles = 0
+        log.info { "Started at ${startTS.format(timestampFormatter)}" }
+
+        // Logging the test mode
         log.info {
             var logText = "*** Testmode is $testOnly, "
             if (testOnly)
@@ -64,6 +72,13 @@ class MediaSorterLogic
             ?.filter { fileEntry -> fileEntry.isFile }
             ?.filter { fileEntry -> !fileEntry.name.startsWith("._") }
             ?.filter { fileEntry -> isPhoto(fileEntry) || isVideo(fileEntry) }
+            ?.filter { fileEntry ->
+                val isEmpty = fileEntry.length() == 0L
+                if (isEmpty) {
+                    log.warn { "*** Empty file, skipped: ${fileEntry.absolutePath}" }
+                }
+                !isEmpty
+            }
             ?.forEach { fileEntry ->
                 val mediaTS = getCreationDate(fileEntry)
                 if (mediaTS != null) {
@@ -84,11 +99,30 @@ class MediaSorterLogic
                                 testOnly)
                         }
                     }
+                    handledFiles++
                 }
                 else {
                     log.warn { "Could not get creation date for ${fileEntry.absolutePath}" }
                 }
             }
+
+        // Logging end time and statistics
+        val endTS = LocalDateTime.now()
+        log.info {
+            "Finished at ${endTS.format(timestampFormatter)}, " +
+                "duration ${formatDuration(Duration.between(startTS, endTS))}, " +
+                "${String.format(Locale.GERMAN, "%,d", handledFiles)} file(s) processed"
+        }
+    }
+
+    /**
+     * Format a duration as HH:mm:ss.
+     * @param   duration the duration
+     * @return  formatted duration
+     */
+    private fun formatDuration(duration: Duration) : String {
+        return String.format("%02d:%02d:%02d",
+            duration.toHours(), duration.toMinutesPart(), duration.toSecondsPart())
     }
 
     /**
@@ -127,29 +161,32 @@ class MediaSorterLogic
     /**
      * Get the creation time for the given file.
      * First try to get it from the metadata, if not present get it from the file system.
+     * The metadata is read only once and then passed to the extraction functions.
      * @param   file the file
      * @return  creation time
      */
     private fun getCreationDate(file: File) : LocalDateTime? {
+        if (!isPhoto(file) && !isVideo(file)) {
+            log.debug { "Unknown file: ${file.absoluteFile}" }
+            return null
+        }
+
+        val metadata = readMetadata(file)
         var date : LocalDateTime?
         if (isPhoto(file)) {
-            date = getMetadataIFD0Date(file)
+            date = getMetadataIFD0Date(metadata)
             if (date == null) {
-                date = getMetadataSubIFDDate(file)
-            }
-        }
-        else if (isVideo(file)) {
-            date = getMetadataQuicktimeMetadataDate(file)
-            if (date == null) {
-                date = getMetadataQuicktimeMovieHeaderDate(file)
-            }
-            if (date == null) {
-                date = getMetadataMp4Date(file)
+                date = getMetadataSubIFDDate(metadata)
             }
         }
         else {
-            log.debug { "Unknown file: ${file.absoluteFile}" }
-            return null
+            date = getMetadataQuicktimeMetadataDate(metadata)
+            if (date == null) {
+                date = getMetadataQuicktimeMovieHeaderDate(metadata)
+            }
+            if (date == null) {
+                date = getMetadataMp4Date(metadata)
+            }
         }
 
         if (date == null) {
@@ -187,21 +224,13 @@ class MediaSorterLogic
     }
 
     /**
-     * Get date from the Exif IFD0 directory.
+     * Read all metadata of a file.
      * @param   file the file
-     * @return  date
+     * @return  metadata
      */
-    private fun getMetadataIFD0Date(file: File) : LocalDateTime? {
+    private fun readMetadata(file: File) : Metadata {
         try {
-            val directory = ImageMetadataReader
-                .readMetadata(file)
-                .getFirstDirectoryOfType(ExifIFD0Directory::class.java)
-                ?: return null
-            val date = directory
-                .getDate(ExifIFD0Directory.TAG_DATETIME, TimeZone.getDefault())
-                ?: return null
-
-            return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault())
+            return ImageMetadataReader.readMetadata(file)
         }
         catch (e: ImageProcessingException) {
             log.error { "Error in processing file ${file.absolutePath}: ${e.message}" }
@@ -210,13 +239,28 @@ class MediaSorterLogic
     }
 
     /**
-     * Get date from the Exif SubIFD directory.
-     * @param   file the file
+     * Get date from the Exif IFD0 directory.
+     * @param   metadata the metadata of the file
      * @return  date
      */
-    private fun getMetadataSubIFDDate(file: File) : LocalDateTime? {
-        val directory = ImageMetadataReader
-            .readMetadata(file)
+    private fun getMetadataIFD0Date(metadata: Metadata) : LocalDateTime? {
+        val directory = metadata
+            .getFirstDirectoryOfType(ExifIFD0Directory::class.java)
+            ?: return null
+        val date = directory
+            .getDate(ExifIFD0Directory.TAG_DATETIME, TimeZone.getDefault())
+            ?: return null
+
+        return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault())
+    }
+
+    /**
+     * Get date from the Exif SubIFD directory.
+     * @param   metadata the metadata of the file
+     * @return  date
+     */
+    private fun getMetadataSubIFDDate(metadata: Metadata) : LocalDateTime? {
+        val directory = metadata
             .getFirstDirectoryOfType(ExifSubIFDDirectory::class.java)
             ?: return null
         val date = directory
@@ -228,33 +272,29 @@ class MediaSorterLogic
 
     /**
      * Get date from the Quicktime directory.
-     * @param   file the file
+     * @param   metadata the metadata of the file
      * @return  date
      */
-    private fun getMetadataQuicktimeMetadataDate(file: File) : LocalDateTime? {
-        val directory = ImageMetadataReader
-            .readMetadata(file)
+    private fun getMetadataQuicktimeMetadataDate(metadata: Metadata) : LocalDateTime? {
+        val directory = metadata
             .getFirstDirectoryOfType(QuickTimeMetadataDirectory::class.java)
             ?: return null
         val date = directory
             .getDate(QuickTimeMetadataDirectory.TAG_CREATION_DATE, TimeZone.getDefault())
             ?: return null
 
-        return LocalDateTime
-            .ofInstant(date.toInstant(), ZoneId.systemDefault())
-            .plusHours(1)
+        return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault())
     }
 
     /**
      * Get date from the QuickTime movie header (mvhd atom, files with brand "qt").
      * Written by most non-Apple cameras that don't set com.apple.quicktime.creationdate.
      * The value is stored in UTC.
-     * @param   file the file
+     * @param   metadata the metadata of the file
      * @return  date, or null if not present or unset
      */
-    private fun getMetadataQuicktimeMovieHeaderDate(file: File) : LocalDateTime? {
-        val date = ImageMetadataReader
-            .readMetadata(file)
+    private fun getMetadataQuicktimeMovieHeaderDate(metadata: Metadata) : LocalDateTime? {
+        val date = metadata
             .getFirstDirectoryOfType(QuickTimeDirectory::class.java)
             ?.getDate(QuickTimeDirectory.TAG_CREATION_TIME)
             ?: return null
@@ -265,12 +305,11 @@ class MediaSorterLogic
     /**
      * Get date from the MP4 movie header (mvhd atom, files with an MP4 brand like "mp42",
      * also seen with a .MOV extension). The value is stored in UTC.
-     * @param   file the file
+     * @param   metadata the metadata of the file
      * @return  date, or null if not present or unset
      */
-    private fun getMetadataMp4Date(file: File) : LocalDateTime? {
-        val date = ImageMetadataReader
-            .readMetadata(file)
+    private fun getMetadataMp4Date(metadata: Metadata) : LocalDateTime? {
+        val date = metadata
             .getFirstDirectoryOfType(Mp4Directory::class.java)
             ?.getDate(Mp4Directory.TAG_CREATION_TIME)
             ?: return null
@@ -298,11 +337,7 @@ class MediaSorterLogic
         val attr = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java)
         val creationTS = LocalDateTime.ofInstant(attr.creationTime().toInstant(), ZoneId.systemDefault())
         val lastModifiedTS = LocalDateTime.ofInstant(attr.lastModifiedTime().toInstant(), ZoneId.systemDefault())
-        return if (creationTS < lastModifiedTS) {
-            creationTS.plusHours(1)
-        } else {
-            lastModifiedTS.plusHours(1)
-        }
+        return minOf(creationTS, lastModifiedTS)
     }
 
     /**
@@ -408,6 +443,5 @@ class MediaSorterLogic
     private fun changeFileExtension(file: File, newExtension: String): File {
         return File(file.parent, "${file.nameWithoutExtension}.$newExtension")
     }
-
 }
 
