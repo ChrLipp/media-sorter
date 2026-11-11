@@ -2,7 +2,7 @@ package at.corba.tools.media_sorter
 
 import at.corba.tools.media_sorter.libs.FileVersionProvider
 import at.corba.tools.media_sorter.logic.MediaSorterLogic
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Component
 import picocli.CommandLine

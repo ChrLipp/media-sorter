@@ -5,8 +5,10 @@ import com.drew.imaging.ImageMetadataReader
 import com.drew.imaging.ImageProcessingException
 import com.drew.metadata.exif.ExifIFD0Directory
 import com.drew.metadata.exif.ExifSubIFDDirectory
+import com.drew.metadata.mov.QuickTimeDirectory
 import com.drew.metadata.mov.metadata.QuickTimeMetadataDirectory
-import mu.KotlinLogging
+import com.drew.metadata.mp4.Mp4Directory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Component
 import java.io.File
 import java.nio.file.Files
@@ -84,7 +86,7 @@ class MediaSorterLogic
                     }
                 }
                 else {
-                    log.warn("Could not get creation date for ${fileEntry.absolutePath}")
+                    log.warn { "Could not get creation date for ${fileEntry.absolutePath}" }
                 }
             }
     }
@@ -131,13 +133,19 @@ class MediaSorterLogic
     private fun getCreationDate(file: File) : LocalDateTime? {
         var date : LocalDateTime?
         if (isPhoto(file)) {
-            date = geMetadataIFD0Date(file)
+            date = getMetadataIFD0Date(file)
             if (date == null) {
-                date = geMetadataISubIFDDate(file)
+                date = getMetadataSubIFDDate(file)
             }
         }
         else if (isVideo(file)) {
-            date = geMetadataQuicktimeMetadataDate(file)
+            date = getMetadataQuicktimeMetadataDate(file)
+            if (date == null) {
+                date = getMetadataQuicktimeMovieHeaderDate(file)
+            }
+            if (date == null) {
+                date = getMetadataMp4Date(file)
+            }
         }
         else {
             log.debug { "Unknown file: ${file.absoluteFile}" }
@@ -161,16 +169,16 @@ class MediaSorterLogic
             .readMetadata(file)
             .directories
             .forEach { directory ->
-                log.info { "- $directory.name" }
+                log.info { "- ${directory.name}" }
                 for (tag in directory.tags) {
-                    log.info("  - ${directory.getName()}, ${tag.getTagName()}, ${tag.getDescription()}")
+                    log.info { "  - ${directory.getName()}, ${tag.getTagName()}, ${tag.getDescription()}" }
                 }
             }
     }
 
     /**
      * Test a given file (log meta entries and creation date).
-     * @param   file the file
+     * @param   testFile the file
      */
     fun testFile(testFile: File) {
         listMetaEntries(testFile)
@@ -183,7 +191,7 @@ class MediaSorterLogic
      * @param   file the file
      * @return  date
      */
-    private fun geMetadataIFD0Date(file: File) : LocalDateTime? {
+    private fun getMetadataIFD0Date(file: File) : LocalDateTime? {
         try {
             val directory = ImageMetadataReader
                 .readMetadata(file)
@@ -196,7 +204,7 @@ class MediaSorterLogic
             return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault())
         }
         catch (e: ImageProcessingException) {
-            log.error("Error in processing file ${file.absolutePath}: ${e.message}")
+            log.error { "Error in processing file ${file.absolutePath}: ${e.message}" }
             throw e
         }
     }
@@ -206,7 +214,7 @@ class MediaSorterLogic
      * @param   file the file
      * @return  date
      */
-    private fun geMetadataISubIFDDate(file: File) : LocalDateTime? {
+    private fun getMetadataSubIFDDate(file: File) : LocalDateTime? {
         val directory = ImageMetadataReader
             .readMetadata(file)
             .getFirstDirectoryOfType(ExifSubIFDDirectory::class.java)
@@ -223,7 +231,7 @@ class MediaSorterLogic
      * @param   file the file
      * @return  date
      */
-    private fun geMetadataQuicktimeMetadataDate(file: File) : LocalDateTime? {
+    private fun getMetadataQuicktimeMetadataDate(file: File) : LocalDateTime? {
         val directory = ImageMetadataReader
             .readMetadata(file)
             .getFirstDirectoryOfType(QuickTimeMetadataDirectory::class.java)
@@ -235,6 +243,50 @@ class MediaSorterLogic
         return LocalDateTime
             .ofInstant(date.toInstant(), ZoneId.systemDefault())
             .plusHours(1)
+    }
+
+    /**
+     * Get date from the QuickTime movie header (mvhd atom, files with brand "qt").
+     * Written by most non-Apple cameras that don't set com.apple.quicktime.creationdate.
+     * The value is stored in UTC.
+     * @param   file the file
+     * @return  date, or null if not present or unset
+     */
+    private fun getMetadataQuicktimeMovieHeaderDate(file: File) : LocalDateTime? {
+        val date = ImageMetadataReader
+            .readMetadata(file)
+            .getFirstDirectoryOfType(QuickTimeDirectory::class.java)
+            ?.getDate(QuickTimeDirectory.TAG_CREATION_TIME)
+            ?: return null
+
+        return movieHeaderDateToLocalDateTime(date)
+    }
+
+    /**
+     * Get date from the MP4 movie header (mvhd atom, files with an MP4 brand like "mp42",
+     * also seen with a .MOV extension). The value is stored in UTC.
+     * @param   file the file
+     * @return  date, or null if not present or unset
+     */
+    private fun getMetadataMp4Date(file: File) : LocalDateTime? {
+        val date = ImageMetadataReader
+            .readMetadata(file)
+            .getFirstDirectoryOfType(Mp4Directory::class.java)
+            ?.getDate(Mp4Directory.TAG_CREATION_TIME)
+            ?: return null
+
+        return movieHeaderDateToLocalDateTime(date)
+    }
+
+    /**
+     * Convert a movie header date to local time.
+     * Devices that don't set the date write 0, which is the QuickTime epoch (1904).
+     * @param   date the date from the movie header
+     * @return  local date, or null if the date is unset
+     */
+    private fun movieHeaderDateToLocalDateTime(date: Date) : LocalDateTime? {
+        val result = LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault())
+        return if (result.year < 1971) null else result
     }
 
     /**

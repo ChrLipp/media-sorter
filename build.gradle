@@ -20,7 +20,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-logging'
 	implementation 'org.jetbrains.kotlin:kotlin-reflect'
 	implementation 'org.jetbrains.kotlin:kotlin-stdlib'
-	implementation "io.github.microutils:kotlin-logging-jvm:$LOGGING_VERSION"
+	implementation "io.github.oshai:kotlin-logging-jvm:$LOGGING_VERSION"
 	implementation "info.picocli:picocli:$PICOCLI_VERSION"
 	implementation "com.drewnoakes:metadata-extractor:$METADATA_VERSION"
 
@@ -34,14 +34,16 @@ ext {
 	ARGS = [
 //		'-h'                // help
 //		'-V'                // version
+//
 //		# Process directories
 //      ["-i", "--input"] Input directory
-		'-i', '/Volumes/USB250GB/Mediathek',
+		'-i', '/Volumes/SSD/In',
 //		["-o", "--output"] Output directory
-		'-o', '/Users/christian/Sort',
+		'-o', '/Volumes/SSD/Out',
 //		["-t", "--test"] Simulation mode, no movement"
-//		'-t'				// test
-//		# Test only a file, alternative to the arguments above
+		'-t'				// test
+//
+//		# Test only a file, alternative to the arguments aboveps
 //		'-e', '/Volumes/photo/2018/201801/20180120 Feier Mandi/DSCN6618.JPG'
 //		'-e', '/Users/christian/Pictures/2017/IMG_4496.JPG'
 //		'-e', '/Users/christian/Pictures/2017/IMG_4475.MOV'
